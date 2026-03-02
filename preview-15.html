@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Astro Preview Integrate+ — AutoSTF + ABE + SCNR + JPG</title>
+  <style>
+    :root { --bg:#0b0c10; --card:#14161d; --muted:#9aa3b2; --text:#e8edf6; --line:#262a36; }
+    body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:1400px; margin:18px auto; padding:0 14px; display:grid; gap:14px; grid-template-columns:1fr; }
+    @media(min-width:980px){ .wrap{ grid-template-columns:560px 1fr; align-items:start; } }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    h1{ font-size:16px; margin:0 0 6px; }
+    .sub{ color:var(--muted); font-size:13px; line-height:1.35; margin:0 0 12px; }
+    label{ display:block; font-size:12px; color:var(--muted); margin:10px 0 6px; }
+    input, select, button {
+      width:100%; box-sizing:border-box; border-radius:12px; border:1px solid var(--line);
+      background:#0f1117; color:var(--text); padding:10px 12px; font-size:14px;
+    }
+    input[type="range"]{ padding:10px 0; }
+    button{ cursor:pointer; border:1px solid #2a3150; background:linear-gradient(180deg,#1b2450,#12183a); }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .btnRow{ display:flex; gap:10px; flex-wrap:wrap; }
+    .btnRow button{ width:auto; padding:10px 12px; }
+    .row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .row3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+    .divider{ height:1px; background:var(--line); margin:12px 0; }
+    .status{ margin-top:10px; font-size:13px; color:var(--muted); white-space:pre-wrap; }
+    .err{ color:#ff8a8a; } .ok{ color:#9cffc7; } .warn{ color:#ffcf7a; }
+    .viewer{ display:flex; flex-direction:column; gap:12px; }
+    .toolbar{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .pill{ font-size:12px; color:var(--muted); border:1px solid var(--line); padding:6px 10px; border-radius:999px; }
+    .canvasWrap{
+      background:#0f1117; border:1px dashed #2a2f40; border-radius:16px; padding:12px;
+      display:flex; align-items:center; justify-content:center; min-height:680px; overflow:auto;
+    }
+    canvas{ border-radius:12px; border:1px solid var(--line); max-width:100%; height:auto; }
+    .progWrap{ margin-top:10px; }
+    .progBar{ height:10px; width:100%; border-radius:999px; background:#0f1117; border:1px solid var(--line); overflow:hidden; }
+    .progFill{ height:100%; width:0%; background:linear-gradient(90deg,#2a4bd7,#20c997); }
+    .progText{ margin-top:6px; font-size:12px; color:var(--muted); }
+    .tiny{ font-size:12px; color:var(--muted); line-height:1.4; }
+    code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    a.link{ color:#b8c7ff; text-decoration:none; }
+    a.link:hover{ text-decoration:underline; }
+    .footer{
+      margin-top:10px; padding-top:10px; border-top:1px solid var(--line);
+      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    }
+    .badge{
+      border:1px solid var(--line); background:#0f1117; border-radius:999px; padding:8px 10px;
+      color:var(--muted); font-size:12px;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Astro Preview Integrate+</h1>
+    <p class="sub">
+      Tarayıcıda: <b>Registration (shift) + Integration (preview)</b> + “PixInsight hissi” butonları (AutoSTF / ABE / SCNR).
+      <br>Çıktı: <b>Full-res linear FITS (float32)</b> export → PixInsight’te gerçek post.
+    </p>
+
+    <label>FITS dosyaları (2+)</label>
+    <input id="fitsFiles" type="file" multiple accept=".fits,.fit,application/fits" />
+
+    <div class="row">
+      <div>
+        <label>Kamera preset</label>
+        <select id="camera">
+          <option value="auto" selected>Auto</option>
+          <option value="asi2600mc">ZWO ASI2600MC (RGGB)</option>
+          <option value="asi533mc">ZWO ASI533MC (RGGB)</option>
+        </select>
+      </div>
+      <div>
+        <label>Debayer</label>
+        <select id="debayer">
+          <option value="auto" selected>Auto (header + preset)</option>
+          <option value="RGGB">RGGB</option>
+          <option value="BGGR">BGGR</option>
+          <option value="GRBG">GRBG</option>
+          <option value="GBRG">GBRG</option>
+          <option value="off">Kapalı (mono)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row3">
+      <div>
+        <label>Preview scale</label>
+        <select id="previewScale">
+          <option value="2">1/2</option>
+          <option value="4" selected>1/4</option>
+          <option value="8">1/8 (ultra hızlı)</option>
+        </select>
+      </div>
+      <div>
+        <label>Registration</label>
+        <select id="align">
+          <option value="on" selected>Açık (NCC shift)</option>
+          <option value="off">Kapalı</option>
+        </select>
+      </div>
+      <div>
+        <label>Integration</label>
+        <select id="method">
+          <option value="mean" selected>Mean</option>
+          <option value="median">Median</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>NCC search window (preview px)</label>
+        <select id="maxShift">
+          <option value="8">±8</option>
+          <option value="12" selected>±12</option>
+          <option value="16">±16</option>
+          <option value="24">±24</option>
+        </select>
+      </div>
+      <div>
+        <label>Preview stretch</label>
+        <select id="stretch">
+          <option value="asinh" selected>Asinh</option>
+          <option value="linear">Linear</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="row">
+      <button id="btnPreview" disabled>Preview Stack (Hızlı)</button>
+      <button id="btnExport" disabled>Full-res Export (Linear FITS)</button>
+    </div>
+
+    <label>Preview Post (PixInsight hissi)</label>
+    <div class="btnRow">
+      <button id="btnAutoSTF" disabled>AutoSTF</button>
+      <button id="btnABE" disabled>ABE: Kapalı</button>
+      <button id="btnSCNR" disabled>SCNR: Kapalı</button>
+      <button id="btnResetPost" disabled>Post Reset</button>
+    </div>
+
+    <div class="row3">
+      <div>
+        <label>ABE strength</label>
+        <input id="abeS" type="range" min="0" max="1" step="0.01" value="0.65" />
+      </div>
+      <div>
+        <label>SCNR strength</label>
+        <input id="scnrS" type="range" min="0" max="1" step="0.01" value="0.75" />
+      </div>
+      <div>
+        <label>AutoSTF target background</label>
+        <input id="stfTarget" type="range" min="0.10" max="0.40" step="0.01" value="0.25" />
+      </div>
+    </div>
+
+    <label>JPG export (preview canvas)</label>
+    <div class="row">
+      <div>
+        <label>JPG kalite</label>
+        <input id="jpgQ" type="range" min="0.2" max="1" step="0.01" value="0.92" />
+      </div>
+      <div style="display:flex; align-items:end;">
+        <button id="btnJpg" disabled>JPG İndir</button>
+      </div>
+    </div>
+
+    <div class="progWrap">
+      <div class="progBar"><div class="progFill" id="pf"></div></div>
+      <div class="progText" id="pt">0%</div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="footer">
+      <div class="badge"><b>BATUHAN DERELİ</b> — <span>@dereli_astrophotography</span></div>
+      <a class="link" href="https://instagram.com/dereli_astrophotography" target="_blank" rel="noopener">
+        <button style="width:auto;">Like at</button>
+      </a>
+    </div>
+
+    <p class="tiny" style="margin-top:10px;">
+      Lokal test: <code>python3 -m http.server 8000</code> → <code>http://localhost:8000</code><br>
+      Not: ABE/AutoSTF/SCNR sadece preview’da. Full export her zaman <b>linear float32 FITS</b>.
+    </p>
+  </div>
+
+  <div class="card viewer">
+    <div class="toolbar">
+      <span class="pill" id="pill">Hazır</span>
+      <button id="btnPng" disabled style="width:auto;">PNG İndir (preview)</button>
+    </div>
+    <div class="canvasWrap"><canvas id="cv"></canvas></div>
+    <div class="tiny" id="meta"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  const fitsFiles = $("fitsFiles");
+  const cameraEl = $("camera");
+  const debayerEl = $("debayer");
+  const previewScaleEl = $("previewScale");
+  const alignEl = $("align");
+  const methodEl = $("method");
+  const maxShiftEl = $("maxShift");
+  const stretchEl = $("stretch");
+
+  const btnPreview = $("btnPreview");
+  const btnExport  = $("btnExport");
+  const btnPng     = $("btnPng");
+  const btnJpg     = $("btnJpg");
+
+  const btnAutoSTF = $("btnAutoSTF");
+  const btnABE     = $("btnABE");
+  const btnSCNR    = $("btnSCNR");
+  const btnResetPost = $("btnResetPost");
+  const abeSEl = $("abeS");
+  const scnrSEl = $("scnrS");
+  const stfTargetEl = $("stfTarget");
+  const jpgQEl = $("jpgQ");
+
+  const statusEl = $("status");
+  const pillEl   = $("pill");
+  const metaEl   = $("meta");
+  const pf = $("pf");
+  const pt = $("pt");
+
+  const cv = $("cv");
+  const ctx = cv.getContext("2d", { willReadFrequently:true });
+
+  // full-res decoded frames
+  let parsedFrames = null;
+  let fullW=0, fullH=0, isColor=false;
+
+  // preview buffers (pre-post)
+  let pW=0, pH=0;
+  let pR=null, pG=null, pB=null, pL=null; // keep original preview integration output
+  let previewReady=false;
+
+  // post toggles
+  let postABE=false;
+  let postSCNR=false;
+
+  // AutoSTF params (used in render)
+  // black/white in normalized space, midtone parameter m (MTF)
+  let stf = { enabled:false, black:0.0, white:1.0, mid:0.25 };
+
+  const clamp01 = x => x<0?0:(x>1?1:x);
+  const setPill = (t,cls="") => { pillEl.textContent=t; pillEl.className="pill "+cls; };
+  const setStatus = (t,cls="") => { statusEl.textContent=t||""; statusEl.className="status "+cls; };
+  const setProg = (p,label="") => {
+    const v=Math.max(0,Math.min(100,p));
+    pf.style.width=v.toFixed(0)+"%";
+    pt.textContent = label ? `${v.toFixed(0)}% — ${label}` : `${v.toFixed(0)}%`;
+  };
+
+  // -------- FITS minimal --------
+  function readAscii(view, start, len){ let s=""; for(let i=0;i<len;i++) s+=String.fromCharCode(view.getUint8(start+i)); return s; }
+  function parseHeader(buffer){
+    const view=new DataView(buffer);
+    const cards=[]; let off=0;
+    while(true){
+      const c=readAscii(view,off,80);
+      cards.push(c); off+=80;
+      if(c.startsWith("END")) break;
+      if(off+80>buffer.byteLength) throw new Error("FITS header END bulunamadı.");
+    }
+    const headerBytes=Math.ceil(off/2880)*2880;
+    const kv={};
+    for(const c of cards){
+      const eq=c.indexOf("=");
+      if(eq>0){
+        const key=c.slice(0,eq).trim();
+        let val=c.slice(eq+1).split("/")[0].trim();
+        if(val.startsWith("'")&&val.endsWith("'")) val=val.slice(1,-1);
+        kv[key]=val;
+      }
+    }
+    return {kv, headerBytes};
+  }
+  function parseNumber(x){ if(x==null) return null; const t=String(x).trim(); if(!t) return null; const n=Number(t); return Number.isFinite(n)?n:null; }
+  function bytesPerSample(bitpix){
+    if(bitpix===16) return 2;
+    if(bitpix===32||bitpix===-32) return 4;
+    if(bitpix===-64) return 8;
+    throw new Error("BITPIX desteklenmiyor: "+bitpix);
+  }
+  function readSample(view, off, bitpix){
+    if(bitpix===16) return view.getInt16(off,false);
+    if(bitpix===32) return view.getInt32(off,false);
+    if(bitpix===-32) return view.getFloat32(off,false);
+    if(bitpix===-64) return view.getFloat64(off,false);
+    throw new Error("BITPIX desteklenmiyor: "+bitpix);
+  }
+  function normBayer(p){
+    if(!p) return null;
+    p=String(p).trim().toUpperCase();
+    const m=p.match(/(RGGB|BGGR|GRBG|GBRG)/);
+    return m?m[1]:null;
+  }
+  function fitsRead(buffer){
+    const {kv, headerBytes}=parseHeader(buffer);
+    const bitpix=parseNumber(kv.BITPIX);
+    const naxis=parseNumber(kv.NAXIS);
+    const naxis1=parseNumber(kv.NAXIS1);
+    const naxis2=parseNumber(kv.NAXIS2);
+    const naxis3=parseNumber(kv.NAXIS3);
+    if(!bitpix||!naxis||!naxis1||!naxis2) throw new Error("FITS anahtarları eksik.");
+    const w=naxis1, h=naxis2, count=w*h;
+    const bscale=parseNumber(kv.BSCALE)??1.0;
+    const bzero=parseNumber(kv.BZERO)??0.0;
+    const bps=bytesPerSample(bitpix);
+    const view=new DataView(buffer, headerBytes);
+
+    if(naxis===3 && naxis3===3){
+      const planeBytes=count*bps;
+      const R=new Float32Array(count), G=new Float32Array(count), B=new Float32Array(count);
+      for(let i=0;i<count;i++){
+        R[i]=readSample(view, i*bps, bitpix)*bscale+bzero;
+        G[i]=readSample(view, planeBytes+i*bps, bitpix)*bscale+bzero;
+        B[i]=readSample(view, 2*planeBytes+i*bps, bitpix)*bscale+bzero;
+      }
+      return {w,h,mode:"rgbcube",R,G,B,bayer:null,header:kv};
+    }
+
+    const mono=new Float32Array(count);
+    for(let i=0;i<count;i++) mono[i]=readSample(view, i*bps, bitpix)*bscale+bzero;
+    const bayer=normBayer(kv.BAYERPAT || kv.BAYER || kv.BAYERPATTERN || kv.BAYERPATN);
+    return {w,h,mode:"mono",mono,bayer,header:kv};
+  }
+
+  // -------- Debayer (bilinear, correct Gr/Gb) --------
+  function greenType(x,y,pattern){
+    const xe=x&1, ye=y&1;
+    if(pattern==="RGGB") return (ye===0 && xe===1) ? "Gr" : "Gb";
+    if(pattern==="BGGR") return (ye===0 && xe===1) ? "Gb" : "Gr";
+    if(pattern==="GRBG") return (ye===0 && xe===0) ? "Gr" : "Gb";
+    return (ye===0 && xe===0) ? "Gb" : "Gr"; // GBRG
+  }
+  function colorAt(x,y,pattern){
+    const xe=x&1, ye=y&1;
+    if(pattern==="RGGB"){
+      if(ye===0 && xe===0) return "R";
+      if(ye===0 && xe===1) return "G";
+      if(ye===1 && xe===0) return "G";
+      return "B";
+    }
+    if(pattern==="BGGR"){
+      if(ye===0 && xe===0) return "B";
+      if(ye===0 && xe===1) return "G";
+      if(ye===1 && xe===0) return "G";
+      return "R";
+    }
+    if(pattern==="GRBG"){
+      if(ye===0 && xe===0) return "G";
+      if(ye===0 && xe===1) return "R";
+      if(ye===1 && xe===0) return "B";
+      return "G";
+    }
+    if(ye===0 && xe===0) return "G"; // GBRG
+    if(ye===0 && xe===1) return "B";
+    if(ye===1 && xe===0) return "R";
+    return "G";
+  }
+  function debayerBilinear(mono,w,h,pattern){
+    const R=new Float32Array(w*h), G=new Float32Array(w*h), B=new Float32Array(w*h);
+    const safe=(x,y)=>mono[Math.max(0,Math.min(h-1,y))*w + Math.max(0,Math.min(w-1,x))];
+
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const i=y*w+x;
+        const c=colorAt(x,y,pattern);
+        const v=mono[i];
+        if(c==="R"){
+          R[i]=v;
+          G[i]=(safe(x-1,y)+safe(x+1,y)+safe(x,y-1)+safe(x,y+1))/4;
+          B[i]=(safe(x-1,y-1)+safe(x+1,y-1)+safe(x-1,y+1)+safe(x+1,y+1))/4;
+        } else if(c==="B"){
+          B[i]=v;
+          G[i]=(safe(x-1,y)+safe(x+1,y)+safe(x,y-1)+safe(x,y+1))/4;
+          R[i]=(safe(x-1,y-1)+safe(x+1,y-1)+safe(x-1,y+1)+safe(x+1,y+1))/4;
+        } else {
+          G[i]=v;
+          const gt=greenType(x,y,pattern);
+          if(gt==="Gr"){
+            R[i]=(safe(x-1,y)+safe(x+1,y))/2;
+            B[i]=(safe(x,y-1)+safe(x,y+1))/2;
+          } else {
+            B[i]=(safe(x-1,y)+safe(x+1,y))/2;
+            R[i]=(safe(x,y-1)+safe(x,y+1))/2;
+          }
+        }
+      }
+    }
+    return {R,G,B};
+  }
+
+  function cameraDefaultPattern(){
+    const v=cameraEl.value;
+    if(v==="asi2600mc") return "RGGB";
+    if(v==="asi533mc") return "RGGB";
+    return null;
+  }
+  function resolvePattern(headerBayer){
+    const sel=debayerEl.value;
+    if(sel==="off") return null;
+    if(sel!=="auto") return sel;
+    return headerBayer || cameraDefaultPattern();
+  }
+
+  // -------- Downscale --------
+  function downscaleChannel(src, w, h, scale){
+    const ds=scale;
+    const ww=Math.floor(w/ds), hh=Math.floor(h/ds);
+    const out=new Float32Array(ww*hh);
+    for(let y=0;y<hh;y++){
+      for(let x=0;x<ww;x++){
+        let sum=0,c=0;
+        const y0=y*ds, x0=x*ds;
+        for(let yy=0; yy<ds; yy++){
+          for(let xx=0; xx<ds; xx++){
+            sum += src[(y0+yy)*w + (x0+xx)];
+            c++;
+          }
+        }
+        out[y*ww+x]=sum/c;
+      }
+    }
+    return {arr:out, w:ww, h:hh};
+  }
+
+  // -------- NCC shift-only (on preview luma) --------
+  function lumaArr(R,G,B){
+    const out=new Float32Array(R.length);
+    if(G && B){
+      for(let i=0;i<out.length;i++) out[i]=0.2126*R[i]+0.7152*G[i]+0.0722*B[i];
+    } else {
+      for(let i=0;i<out.length;i++) out[i]=R[i];
+    }
+    return out;
+  }
+  function findShiftNCC(ref,cur,w,h,maxShift){
+    let rm=0,cm=0;
+    for(let i=0;i<ref.length;i++){ rm+=ref[i]; cm+=cur[i]; }
+    rm/=ref.length; cm/=cur.length;
+
+    let bestDx=0,bestDy=0,bestScore=-1e99;
+    for(let dy=-maxShift;dy<=maxShift;dy++){
+      for(let dx=-maxShift;dx<=maxShift;dx++){
+        let num=0,da=0,db=0;
+        for(let y=0;y<h;y++){
+          const yy=y+dy; if(yy<0||yy>=h) continue;
+          const rrow=y*w, crow=yy*w;
+          for(let x=0;x<w;x++){
+            const xx=x+dx; if(xx<0||xx>=w) continue;
+            const a=ref[rrow+x]-rm;
+            const b=cur[crow+xx]-cm;
+            num+=a*b; da+=a*a; db+=b*b;
+          }
+        }
+        const score=num/(Math.sqrt(da*db)+1e-9);
+        if(score>bestScore){ bestScore=score; bestDx=dx; bestDy=dy; }
+      }
+    }
+    return {dx:bestDx,dy:bestDy,score:bestScore};
+  }
+
+  // sample shifted without copying full arrays
+  function sampleShifted(arr,w,h,x,y,dx,dy){
+    const xx=x-dx, yy=y-dy;
+    if(xx<0||yy<0||xx>=w||yy>=h) return 0;
+    return arr[yy*w+xx];
+  }
+
+  // -------- Integration (shifted) --------
+  function integrateMeanShifted(frames, w, h, shifts, channelGetter){
+    const out=new Float32Array(w*h);
+    const n=frames.length;
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        let sum=0;
+        for(let i=0;i<n;i++){
+          const {dx,dy}=shifts[i];
+          const arr = channelGetter(frames[i]);
+          sum += sampleShifted(arr,w,h,x,y,dx,dy);
+        }
+        out[y*w+x]=sum/n;
+      }
+    }
+    return out;
+  }
+  function integrateMedianShifted(frames, w, h, shifts, channelGetter){
+    const out=new Float32Array(w*h);
+    const n=frames.length;
+    const tmp=new Array(n);
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        for(let i=0;i<n;i++){
+          const {dx,dy}=shifts[i];
+          const arr=channelGetter(frames[i]);
+          tmp[i]=sampleShifted(arr,w,h,x,y,dx,dy);
+        }
+        tmp.sort((a,b)=>a-b);
+        out[y*w+x]=tmp[(n/2)|0];
+      }
+    }
+    return out;
+  }
+
+  // -------- Percentile/median/MAD (fast-ish sampling) --------
+  function sampleValues(arr, maxN=160000){
+    const n=arr.length;
+    const step=Math.max(1, Math.floor(n/maxN));
+    const s=[];
+    for(let i=0;i<n;i+=step) s.push(arr[i]);
+    return s;
+  }
+  function percentile(arr, pct){
+    const s = sampleValues(arr);
+    s.sort((a,b)=>a-b);
+    const idx = Math.min(s.length-1, Math.max(0, Math.floor((pct/100)*(s.length-1))));
+    return s[idx];
+  }
+  function median(arr){
+    return percentile(arr, 50);
+  }
+  function mad(arr){
+    const m = median(arr);
+    const s = sampleValues(arr).map(v => Math.abs(v - m));
+    s.sort((a,b)=>a-b);
+    return s[Math.floor(s.length*0.5)] || 0;
+  }
+
+  // -------- MTF + solve midtone (AutoSTF-ish) --------
+  function mtf(x,m){
+    x=clamp01(x); m=Math.min(0.999999,Math.max(0.000001,m));
+    const num=(m-1)*x;
+    const den=(2*m-1)*x-m;
+    if(Math.abs(den)<1e-12) return 0;
+    return clamp01(num/den);
+  }
+  function solveMidtone(x, target){
+    // binary search m in (0..1) such that mtf(x,m)=target
+    let lo=0.0005, hi=0.9995;
+    for(let it=0; it<32; it++){
+      const mid=(lo+hi)/2;
+      const y=mtf(x, mid);
+      if(y > target) hi = mid; else lo = mid;
+    }
+    return (lo+hi)/2;
+  }
+
+  // -------- Asinh stretch helper --------
+  function asinh01(x){ const k=10; return Math.asinh(k*clamp01(x))/Math.asinh(k); }
+
+  // -------- ABE (fast: large-scale background via downsample + blur) --------
+  function boxBlur1D(src, w, h, radius){
+    const tmp=new Float32Array(src.length);
+    const out=new Float32Array(src.length);
+    const r=Math.max(1, radius|0);
+
+    // horizontal
+    for(let y=0;y<h;y++){
+      let sum=0;
+      let count=0;
+      for(let x=-r;x<=r;x++){
+        const xx=Math.max(0,Math.min(w-1,x));
+        sum += src[y*w+xx]; count++;
+      }
+      for(let x=0;x<w;x++){
+        tmp[y*w+x]=sum/count;
+        const xOut=x-r;
+        const xIn =x+r+1;
+        const xo=Math.max(0,Math.min(w-1,xOut));
+        const xi=Math.max(0,Math.min(w-1,xIn));
+        sum += src[y*w+xi] - src[y*w+xo];
+      }
+    }
+
+    // vertical
+    for(let x=0;x<w;x++){
+      let sum=0;
+      let count=0;
+      for(let y=-r;y<=r;y++){
+        const yy=Math.max(0,Math.min(h-1,y));
+        sum += tmp[yy*w+x]; count++;
+      }
+      for(let y=0;y<h;y++){
+        out[y*w+x]=sum/count;
+        const yOut=y-r;
+        const yIn =y+r+1;
+        const yo=Math.max(0,Math.min(h-1,yOut));
+        const yi=Math.max(0,Math.min(h-1,yIn));
+        sum += tmp[yi*w+x] - tmp[yo*w+x];
+      }
+    }
+    return out;
+  }
+
+  function applyABEChannel(ch, w, h, strength){
+    // downsample for speed
+    const ds=8;
+    const ww=Math.max(16, Math.floor(w/ds));
+    const hh=Math.max(16, Math.floor(h/ds));
+    const small=new Float32Array(ww*hh);
+
+    for(let y=0;y<hh;y++){
+      for(let x=0;x<ww;x++){
+        let sum=0,c=0;
+        const y0=y*ds, x0=x*ds;
+        for(let yy=0;yy<ds;yy++){
+          for(let xx=0;xx<ds;xx++){
+            const Y=Math.min(h-1, y0+yy);
+            const X=Math.min(w-1, x0+xx);
+            sum += ch[Y*w+X]; c++;
+          }
+        }
+        small[y*ww+x]=sum/c;
+      }
+    }
+
+    // big blur on small grid
+    const blurred = boxBlur1D(small, ww, hh, 10);
+
+    // upsample subtract
+    const out=new Float32Array(ch.length);
+    for(let y=0;y<h;y++){
+      const sy=Math.min(hh-1, Math.floor(y/ds));
+      for(let x=0;x<w;x++){
+        const sx=Math.min(ww-1, Math.floor(x/ds));
+        const bg = blurred[sy*ww+sx];
+        out[y*w+x] = ch[y*w+x] - strength*bg;
+      }
+    }
+    return out;
+  }
+
+  // -------- SCNR Green --------
+  function scnrPixel(r,g,b,str){
+    const avg=(r+b)*0.5;
+    const excess=g-avg;
+    g = g - str*excess;
+    return [r,g,b];
+  }
+
+  // -------- Preview render (with Post + AutoSTF) --------
+  function renderPreview(){
+    if(!previewReady) return;
+
+    let R=pR, G=pG, B=pB, L=pL;
+    const abeS = Number(abeSEl.value);
+    const scnrS = Number(scnrSEl.value);
+
+    // ABE operates on a working copy (preview-sized => acceptable)
+    if(postABE){
+      if(isColor){
+        R = applyABEChannel(R, pW, pH, abeS);
+        G = applyABEChannel(G, pW, pH, abeS);
+        B = applyABEChannel(B, pW, pH, abeS);
+      } else {
+        L = applyABEChannel(L, pW, pH, abeS);
+      }
+    }
+
+    cv.width=pW; cv.height=pH;
+    const img=ctx.createImageData(pW,pH);
+    const d=img.data;
+
+    // normalize using luma percentiles
+    let lum;
+    if(isColor){
+      lum=new Float32Array(pW*pH);
+      for(let i=0;i<lum.length;i++) lum[i]=0.2126*R[i]+0.7152*G[i]+0.0722*B[i];
+    } else {
+      lum=L;
+    }
+    const black = percentile(lum, 0.5);
+    const white = percentile(lum, 99.2);
+    const den = (white-black)||1e-9;
+
+    // AutoSTF: compute parameters on lum (normalized) and apply MTF
+    let stfBlack=0, stfWhite=1, stfMid=0.25;
+    if(stf.enabled){
+      stfBlack=stf.black; stfWhite=stf.white; stfMid=stf.mid;
+    }
+
+    for(let i=0;i<pW*pH;i++){
+      let r,g,b,v;
+
+      if(isColor){
+        r=(R[i]-black)/den;
+        g=(G[i]-black)/den;
+        b=(B[i]-black)/den;
+        r=clamp01(r); g=clamp01(g); b=clamp01(b);
+
+        if(stretchEl.value==="asinh"){ r=asinh01(r); g=asinh01(g); b=asinh01(b); }
+
+        // AutoSTF stage
+        if(stf.enabled){
+          r = clamp01((r-stfBlack)/((stfWhite-stfBlack)||1e-9)); r=mtf(r, stfMid);
+          g = clamp01((g-stfBlack)/((stfWhite-stfBlack)||1e-9)); g=mtf(g, stfMid);
+          b = clamp01((b-stfBlack)/((stfWhite-stfBlack)||1e-9)); b=mtf(b, stfMid);
+        }
+
+        if(postSCNR){
+          [r,g,b]=scnrPixel(r,g,b,scnrS);
+          r=clamp01(r); g=clamp01(g); b=clamp01(b);
+        }
+
+        const j=i*4;
+        d[j]=Math.round(r*255);
+        d[j+1]=Math.round(g*255);
+        d[j+2]=Math.round(b*255);
+        d[j+3]=255;
+
+      } else {
+        v=(L[i]-black)/den;
+        v=clamp01(v);
+        if(stretchEl.value==="asinh") v=asinh01(v);
+
+        if(stf.enabled){
+          v = clamp01((v-stfBlack)/((stfWhite-stfBlack)||1e-9));
+          v = mtf(v, stfMid);
+        }
+
+        const u=Math.round(v*255);
+        const j=i*4;
+        d[j]=u; d[j+1]=u; d[j+2]=u; d[j+3]=255;
+      }
+    }
+
+    ctx.putImageData(img,0,0);
+    btnPng.disabled=false;
+    btnJpg.disabled=false;
+
+    metaEl.textContent =
+      `PREVIEW ${isColor?"RGB":"MONO"} | ${pW}x${pH} | ABE=${postABE?"ON":"OFF"} | SCNR=${postSCNR?"ON":"OFF"} | AutoSTF=${stf.enabled?"ON":"OFF"}`;
+  }
+
+  // -------- FITS writer (float32) --------
+  function pad80(s){ return (s + " ".repeat(80)).slice(0,80); }
+  function card(key, value, comment=""){
+    let v = value;
+    if(typeof value==="string" && !value.startsWith("'")) v = `'${value}'`;
+    const left = (key.padEnd(8," ") + "= " + String(v).padStart(20," "));
+    const c = comment ? " / " + comment : "";
+    return pad80(left + c);
+  }
+  function fitsHeaderFor(w,h,isRGB){
+    const cards=[];
+    cards.push(pad80("SIMPLE  =                    T"));
+    cards.push(card("BITPIX",-32,"32-bit floating point"));
+    cards.push(card("NAXIS", isRGB?3:2));
+    cards.push(card("NAXIS1", w));
+    cards.push(card("NAXIS2", h));
+    if(isRGB) cards.push(card("NAXIS3", 3));
+    cards.push(pad80("END"));
+    let header = cards.join("");
+    const padLen = (2880 - (header.length % 2880)) % 2880;
+    header += " ".repeat(padLen);
+    return new TextEncoder().encode(header);
+  }
+  function float32ToBigEndianBytes(arr){
+    const buf=new ArrayBuffer(arr.length*4);
+    const dv=new DataView(buf);
+    for(let i=0;i<arr.length;i++) dv.setFloat32(i*4, arr[i], false);
+    return new Uint8Array(buf);
+  }
+  function downloadBlob(blob, filename){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }
+
+  // -------- Decode all FITS to full-res frames --------
+  async function decodeAll(){
+    const files=Array.from(fitsFiles.files||[]);
+    if(files.length<2) throw new Error("En az 2 FITS seç.");
+    setPill("Hazırlanıyor…");
+    setProg(1,"Okuma");
+    setStatus("FITS decode ediliyor…","ok");
+
+    const parsed=[];
+    for(let i=0;i<files.length;i++){
+      setProg((i/files.length)*25,"Okuma");
+      const buf=await files[i].arrayBuffer();
+      parsed.push({file:files[i], ...fitsRead(buf)});
+      await new Promise(requestAnimationFrame);
+    }
+
+    fullW=parsed[0].w; fullH=parsed[0].h;
+    for(const p of parsed){
+      if(p.w!==fullW||p.h!==fullH) throw new Error(`Boyut uyumsuz: ${p.file.name}`);
+    }
+
+    setProg(28,"Debayer/Format");
+    const frames=[];
+    for(let i=0;i<parsed.length;i++){
+      const p=parsed[i];
+      if(p.mode==="rgbcube"){
+        frames.push({R:p.R,G:p.G,B:p.B});
+        continue;
+      }
+      const pat = resolvePattern(p.bayer);
+      if(pat){
+        const rgb=debayerBilinear(p.mono, fullW, fullH, pat);
+        frames.push({R:rgb.R,G:rgb.G,B:rgb.B});
+      } else {
+        frames.push({R:p.mono,G:null,B:null});
+      }
+      await new Promise(requestAnimationFrame);
+    }
+
+    const colorAll = frames.every(f=>f.G && f.B);
+    const monoAll  = frames.every(f=>!f.G && !f.B);
+    if(!(colorAll||monoAll)) throw new Error("Karışık input: bazı frame RGB bazıları mono. Debayer ayarını standardize et.");
+    isColor=colorAll;
+
+    parsedFrames = frames;
+
+    setProg(35,"Hazır");
+    setPill("Hazır","ok");
+    setStatus(`Decode OK: ${frames.length} frame | ${isColor?"RGB":"MONO"} | ${fullW}x${fullH}`,"ok");
+
+    btnPreview.disabled=false;
+    btnExport.disabled=false;
+  }
+
+  // -------- Compute shifts using preview-scaled NCC --------
+  async function computeShifts(frames, scale, maxShiftPreview){
+    const n=frames.length;
+    const shifts = new Array(n).fill(0).map(()=>({dx:0,dy:0,score:1}));
+
+    if(alignEl.value!=="on") return shifts;
+    setProg(40,"Registration (preview)");
+    const ds=scale;
+
+    const ref = frames[0];
+    const refR = downscaleChannel(ref.R, fullW, fullH, ds);
+    const refG = ref.G ? downscaleChannel(ref.G, fullW, fullH, ds) : null;
+    const refB = ref.B ? downscaleChannel(ref.B, fullW, fullH, ds) : null;
+    const refLum = lumaArr(refR.arr, refG?.arr, refB?.arr);
+
+    for(let i=1;i<n;i++){
+      const pct = 40 + (i/(n-1))*20;
+      setProg(pct,"Registration (preview)");
+      const cur=frames[i];
+      const curR = downscaleChannel(cur.R, fullW, fullH, ds);
+      const curG = cur.G ? downscaleChannel(cur.G, fullW, fullH, ds) : null;
+      const curB = cur.B ? downscaleChannel(cur.B, fullW, fullH, ds) : null;
+      const curLum = lumaArr(curR.arr, curG?.arr, curB?.arr);
+
+      const sh = findShiftNCC(refLum, curLum, curR.w, curR.h, maxShiftPreview);
+      shifts[i] = { dx: Math.round(sh.dx*ds), dy: Math.round(sh.dy*ds), score: sh.score };
+      await new Promise(requestAnimationFrame);
+    }
+    return shifts;
+  }
+
+  // -------- Preview stack --------
+  async function doPreview(){
+    if(!parsedFrames) await decodeAll();
+
+    setPill("Preview…");
+    setProg(36,"Preview hazırlık");
+    setStatus("Preview stack başlıyor…","ok");
+    btnPreview.disabled=true;
+    btnExport.disabled=true;
+    btnPng.disabled=true;
+    btnJpg.disabled=true;
+
+    // enable post tools after preview is ready
+    btnAutoSTF.disabled=true;
+    btnABE.disabled=true;
+    btnSCNR.disabled=true;
+    btnResetPost.disabled=true;
+
+    previewReady=false;
+
+    const scale = Number(previewScaleEl.value);
+    const maxShift = Number(maxShiftEl.value);
+    const shifts = await computeShifts(parsedFrames, scale, maxShift);
+
+    setProg(62,"Integration (preview)");
+
+    // downscale frames once
+    const framesD = parsedFrames.map(f => {
+      const r = downscaleChannel(f.R, fullW, fullH, scale);
+      const g = f.G ? downscaleChannel(f.G, fullW, fullH, scale) : null;
+      const b = f.B ? downscaleChannel(f.B, fullW, fullH, scale) : null;
+      return { R:r.arr, G:g?.arr||null, B:b?.arr||null, w:r.w, h:r.h };
+    });
+
+    pW = framesD[0].w; pH = framesD[0].h;
+    const shiftsP = shifts.map(s => ({ dx: Math.round(s.dx/scale), dy: Math.round(s.dy/scale), score:s.score }));
+    const method = methodEl.value;
+
+    const integrate = (getter) => {
+      if(method==="median") return integrateMedianShifted(framesD, pW, pH, shiftsP, getter);
+      return integrateMeanShifted(framesD, pW, pH, shiftsP, getter);
+    };
+
+    if(isColor){
+      pR = integrate(f=>f.R);
+      pG = integrate(f=>f.G);
+      pB = integrate(f=>f.B);
+      pL = null;
+    } else {
+      pL = integrate(f=>f.R);
+      pR=pG=pB=null;
+    }
+
+    // reset post state each new preview
+    postABE=false; postSCNR=false;
+    btnABE.textContent="ABE: Kapalı";
+    btnSCNR.textContent="SCNR: Kapalı";
+    stf.enabled=false;
+
+    previewReady=true;
+
+    setProg(92,"Render (preview)");
+    renderPreview();
+
+    setProg(100,"Tamam");
+    setPill("Preview hazır","ok");
+    setStatus("Preview hazır. AutoSTF / ABE / SCNR ile hızlı kontrol yap; export sonrası PixInsight’te final post.","ok");
+
+    btnPreview.disabled=false;
+    btnExport.disabled=false;
+
+    btnAutoSTF.disabled=false;
+    btnABE.disabled=false;
+    btnSCNR.disabled=false;
+    btnResetPost.disabled=false;
+  }
+
+  // -------- AutoSTF compute & apply --------
+  function applyAutoSTF(){
+    if(!previewReady) return;
+
+    // compute on luma of current (pre-post) preview for stability
+    let lum;
+    if(isColor){
+      lum=new Float32Array(pW*pH);
+      for(let i=0;i<lum.length;i++) lum[i]=0.2126*pR[i]+0.7152*pG[i]+0.0722*pB[i];
+    } else {
+      lum=pL;
+    }
+
+    // normalize lum to 0..1 via robust percentiles
+    const lo = percentile(lum, 0.5);
+    const hi = percentile(lum, 99.2);
+    const den = (hi-lo)||1e-9;
+
+    const nLum = new Float32Array(lum.length);
+    for(let i=0;i<lum.length;i++) nLum[i]=clamp01((lum[i]-lo)/den);
+
+    // AutoSTF-ish: black = median - k*MAD (in normalized space)
+    const med = median(nLum);
+    const m = mad(nLum);
+    const k = 2.8; // pragmatic
+    let black = med - k*m;
+    black = Math.max(0, Math.min(0.25, black)); // keep sane
+    const white = Math.max(0.7, percentile(nLum, 99.8));
+
+    const target = Number(stfTargetEl.value);
+    const x = clamp01((med - black)/((white-black)||1e-9)); // median position in stretched domain
+    const mid = solveMidtone(x, target);
+
+    stf = { enabled:true, black, white, mid };
+
+    setStatus(
+      `AutoSTF uygulandı.\nblack=${black.toFixed(3)} white=${white.toFixed(3)} mid=${mid.toFixed(3)} target=${target.toFixed(2)}\n`+
+      `Not: Bu sadece preview/JPG içindir. Linear export değişmez.`,
+      "ok"
+    );
+    renderPreview();
+  }
+
+  // -------- Full export (linear FITS float32) --------
+  async function doExport(){
+    if(!parsedFrames) await decodeAll();
+
+    setPill("Export…");
+    setProg(36,"Hazırlık");
+    setStatus("Full-res integration + FITS export başlıyor… (linear)","ok");
+    btnPreview.disabled=true;
+    btnExport.disabled=true;
+
+    const scale = Number(previewScaleEl.value);
+    const maxShift = Number(maxShiftEl.value);
+    const shifts = await computeShifts(parsedFrames, scale, maxShift);
+
+    const method = methodEl.value;
+    setProg(62,"Integration (full-res)");
+
+    const integrateFull = (getter) => {
+      if(method==="median") return integrateMedianShifted(parsedFrames, fullW, fullH, shifts, getter);
+      return integrateMeanShifted(parsedFrames, fullW, fullH, shifts, getter);
+    };
+
+    let payloadParts=[];
+    if(isColor){
+      const R = integrateFull(f=>f.R);
+      setProg(74,"Integrate G");
+      const G = integrateFull(f=>f.G);
+      setProg(86,"Integrate B");
+      const B = integrateFull(f=>f.B);
+
+      payloadParts = [
+        fitsHeaderFor(fullW, fullH, true),
+        float32ToBigEndianBytes(R),
+        float32ToBigEndianBytes(G),
+        float32ToBigEndianBytes(B)
+      ];
+    } else {
+      const L = integrateFull(f=>f.R);
+      payloadParts = [
+        fitsHeaderFor(fullW, fullH, false),
+        float32ToBigEndianBytes(L)
+      ];
+    }
+
+    const blob = new Blob(payloadParts, {type:"application/fits"});
+    const pad = (2880 - (blob.size % 2880)) % 2880;
+    const finalBlob = pad ? new Blob([blob, new Uint8Array(pad)], {type:"application/fits"}) : blob;
+
+    setProg(98,"Download");
+    const ts = new Date().toISOString().replaceAll(":","-");
+    const fn = `integrated_LINEAR_${isColor?"RGB":"MONO"}_${fullW}x${fullH}_${ts}.fits`;
+    downloadBlob(finalBlob, fn);
+
+    setProg(100,"Tamam");
+    setPill("Export tamam","ok");
+    setStatus(`Export tamam: ${fn}\nBu dosya linear. PixInsight’te AutoIntegrate/AutoSTF/STF ile post'a geçebilirsin.`, "ok");
+
+    btnPreview.disabled=false;
+    btnExport.disabled=false;
+  }
+
+  // -------- Downloads (PNG/JPG) --------
+  btnPng.addEventListener("click", () => {
+    if(!previewReady) return;
+    const a=document.createElement("a");
+    a.href=cv.toDataURL("image/png");
+    const ts=new Date().toISOString().replaceAll(":","-");
+    a.download=`preview_${ts}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+
+  btnJpg.addEventListener("click", () => {
+    if(!previewReady) return;
+    const q = Number(jpgQEl.value);
+    const a=document.createElement("a");
+    a.href=cv.toDataURL("image/jpeg", q);
+    const ts=new Date().toISOString().replaceAll(":","-");
+    a.download=`preview_${ts}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+
+  // -------- Post buttons --------
+  btnAutoSTF.addEventListener("click", applyAutoSTF);
+
+  btnABE.addEventListener("click", () => {
+    if(!previewReady) return;
+    postABE = !postABE;
+    btnABE.textContent = `ABE: ${postABE?"Açık":"Kapalı"}`;
+    renderPreview();
+  });
+
+  btnSCNR.addEventListener("click", () => {
+    if(!previewReady) return;
+    postSCNR = !postSCNR;
+    btnSCNR.textContent = `SCNR: ${postSCNR?"Açık":"Kapalı"}`;
+    renderPreview();
+  });
+
+  btnResetPost.addEventListener("click", () => {
+    if(!previewReady) return;
+    postABE=false; postSCNR=false;
+    btnABE.textContent="ABE: Kapalı";
+    btnSCNR.textContent="SCNR: Kapalı";
+    stf.enabled=false;
+    setStatus("Post reset: AutoSTF/ABE/SCNR kapatıldı.", "ok");
+    renderPreview();
+  });
+
+  // live sliders update preview (if ready)
+  [abeSEl, scnrSEl, stfTargetEl, stretchEl].forEach(el=>{
+    el.addEventListener("input", ()=>{ if(previewReady) renderPreview(); });
+    el.addEventListener("change", ()=>{ if(previewReady) renderPreview(); });
+  });
+
+  // -------- UI --------
+  fitsFiles.addEventListener("change", () => {
+    parsedFrames=null;
+    previewReady=false;
+    btnPreview.disabled = (fitsFiles.files?.length||0) < 2;
+    btnExport.disabled  = (fitsFiles.files?.length||0) < 2;
+    btnPng.disabled=true; btnJpg.disabled=true;
+
+    btnAutoSTF.disabled=true; btnABE.disabled=true; btnSCNR.disabled=true; btnResetPost.disabled=true;
+
+    setStatus((fitsFiles.files?.length||0) ? "Dosyalar seçildi. Preview veya Export başlat." : "", "ok");
+  });
+
+  btnPreview.addEventListener("click", async () => {
+    try{ await doPreview(); }
+    catch(e){
+      setPill("Hata","err");
+      setStatus(String(e?.message||e),"err");
+      setProg(0,"");
+      btnPreview.disabled=false; btnExport.disabled=false;
+    }
+  });
+
+  btnExport.addEventListener("click", async () => {
+    try{ await doExport(); }
+    catch(e){
+      setPill("Hata","err");
+      setStatus(String(e?.message||e),"err");
+      setProg(0,"");
+      btnPreview.disabled=false; btnExport.disabled=false;
+    }
+  });
+
+  // boot
+  setPill("Hazır");
+  setProg(0,"");
+})();
+</script>
+</body>
+</html>
